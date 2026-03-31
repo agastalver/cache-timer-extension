@@ -13,11 +13,19 @@ export interface TranscriptEvent {
 export class TranscriptWatcher implements vscode.Disposable {
   private watchers: fs.FSWatcher[] = [];
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private throttleTimers = new Map<
+    string,
+    { timer: ReturnType<typeof setTimeout>; pending: boolean }
+  >();
   private fallbackTitleCache = new Map<string, string>();
 
   private readonly _onAssistantMessage =
     new vscode.EventEmitter<TranscriptEvent>();
   readonly onAssistantMessage = this._onAssistantMessage.event;
+
+  private readonly _onChatActivity =
+    new vscode.EventEmitter<TranscriptEvent>();
+  readonly onChatActivity = this._onChatActivity.event;
 
   private transcriptDir: string | undefined;
 
@@ -95,6 +103,7 @@ export class TranscriptWatcher implements vscode.Disposable {
         const chatId = parts[0];
         const fullPath = path.join(dir, filename);
 
+        this.throttle(chatId, () => this.fireActivity(fullPath, chatId));
         this.debounce(chatId, () => this.processFile(fullPath, chatId));
       });
 
@@ -116,6 +125,52 @@ export class TranscriptWatcher implements vscode.Disposable {
         fn();
       }, delayMs)
     );
+  }
+
+  private throttle(key: string, fn: () => void, intervalMs = 2000): void {
+    const existing = this.throttleTimers.get(key);
+    if (existing) {
+      existing.pending = true;
+      return;
+    }
+
+    fn();
+
+    const schedule = (): void => {
+      const state: { timer: ReturnType<typeof setTimeout>; pending: boolean } =
+        {
+          timer: setTimeout(() => {
+            if (state.pending) {
+              state.pending = false;
+              fn();
+              schedule();
+            } else {
+              this.throttleTimers.delete(key);
+            }
+          }, intervalMs),
+          pending: false,
+        };
+      this.throttleTimers.set(key, state);
+    };
+
+    schedule();
+  }
+
+  private fireActivity(filePath: string, chatId: string): void {
+    try {
+      const stat = fs.statSync(filePath);
+      const title =
+        this.titleResolver.getTitle(chatId) ??
+        this.fallbackTitleCache.get(chatId) ??
+        chatId.slice(0, 8);
+      this._onChatActivity.fire({
+        chatId,
+        title,
+        timestamp: stat.mtimeMs,
+      });
+    } catch {
+      // File may be gone or mid-write
+    }
   }
 
   private processFile(filePath: string, chatId: string): void {
@@ -211,6 +266,13 @@ export class TranscriptWatcher implements vscode.Disposable {
       clearTimeout(t);
     }
     this.debounceTimers.clear();
+
+    for (const t of this.throttleTimers.values()) {
+      clearTimeout(t.timer);
+    }
+    this.throttleTimers.clear();
+
     this._onAssistantMessage.dispose();
+    this._onChatActivity.dispose();
   }
 }

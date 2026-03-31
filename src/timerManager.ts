@@ -43,6 +43,17 @@ export class TimerManager implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
+  touchTimer(chatId: string, timestamp: number): void {
+    const existing = this.timers.get(chatId);
+    if (!existing || timestamp <= existing.lastAssistantTime) {
+      return;
+    }
+    existing.lastAssistantTime = timestamp;
+    existing.remainingSeconds = this.ttlSeconds;
+    existing.isExpired = false;
+    this._onDidChange.fire();
+  }
+
   updateTitle(chatId: string, title: string): void {
     const timer = this.timers.get(chatId);
     if (timer && title) {

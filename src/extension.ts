@@ -33,6 +33,12 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    transcriptWatcher.onChatActivity((event) => {
+      timerManager.touchTimer(event.chatId, event.timestamp);
+    })
+  );
+
   // Keep timer titles in sync with DB titles as they become available
   context.subscriptions.push(
     titleResolver.onDidRefresh((titles) => {
