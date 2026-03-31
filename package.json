@@ -1,0 +1,91 @@
+{
+  "name": "cache-timer-extension",
+  "displayName": "Cache Timer",
+  "description": "Shows countdown timers for the 5-minute LLM prompt cache TTL in Cursor chats",
+  "version": "0.1.0",
+  "publisher": "agastalver",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cacheTimer.resetAll",
+        "title": "Cache Timer: Reset All Timers"
+      },
+      {
+        "command": "cacheTimer.showPanel",
+        "title": "Cache Timer: Show Panel"
+      },
+      {
+        "command": "cacheTimer.openChat",
+        "title": "Cache Timer: Open Chat"
+      },
+      {
+        "command": "cacheTimer.openSettings",
+        "title": "Cache Timer: Open Settings",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cacheTimer.openSettings",
+          "when": "view == cacheTimer.sidebar",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cacheTimerContainer",
+          "title": "Cache Timer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "cacheTimerContainer": [
+        {
+          "type": "webview",
+          "id": "cacheTimer.sidebar",
+          "name": "Cache Timers"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cache Timer",
+      "properties": {
+        "cacheTimer.ttlSeconds": {
+          "type": "number",
+          "default": 300,
+          "description": "Cache time-to-live in seconds (default: 300 = 5 minutes)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.3.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

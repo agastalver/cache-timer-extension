@@ -1,0 +1,12 @@
+.vscode/**
+src/**
+node_modules/**
+.pnpm-store/**
+.pnpm-approve-builds
+tsconfig.json
+esbuild.js
+Makefile
+pnpm-lock.yaml
+*.map
+*.bak
+.gitignore
