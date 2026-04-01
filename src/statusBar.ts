@@ -55,10 +55,19 @@ export class StatusBar implements vscode.Disposable {
 
       const truncatedTitle =
         timer.title.length > 20
-          ? timer.title.slice(0, 17) + "..."
+          ? timer.title.slice(0, 18) + ".."
           : timer.title;
 
-      if (timer.isExpired) {
+      const isStreaming = this.timerManager.isStreaming(chatId);
+
+      if (isStreaming) {
+        const minutes = Math.floor(timer.remainingSeconds / 60);
+        const seconds = timer.remainingSeconds % 60;
+        const display = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+        item.text = `$(sync~spin) ${truncatedTitle}: ${display}`;
+        item.tooltip = `"${timer.title}" — streaming (${display})\nClick to open chat`;
+        item.backgroundColor = undefined;
+      } else if (timer.isExpired) {
         item.text = `$(clock) ${truncatedTitle}: expired`;
         item.tooltip = `"${timer.title}" — cache expired\nClick to open chat`;
         item.backgroundColor = new vscode.ThemeColor(

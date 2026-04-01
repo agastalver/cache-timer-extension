@@ -2,7 +2,7 @@
   "name": "cache-timer-extension",
   "displayName": "Cache Timer",
   "description": "Shows countdown timers for the 5-minute LLM prompt cache TTL in Cursor chats",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "publisher": "agastalver",
   "engines": {
     "vscode": "^1.85.0"
@@ -17,10 +17,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "cacheTimer.resetAll",
-        "title": "Cache Timer: Reset All Timers"
-      },
-      {
         "command": "cacheTimer.showPanel",
         "title": "Cache Timer: Show Panel"
       },
@@ -31,11 +27,29 @@
       {
         "command": "cacheTimer.openSettings",
         "title": "Cache Timer: Open Settings",
-        "icon": "$(gear)"
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "cacheTimer.editTtl",
+        "title": "Cache Timer: Edit TTL"
+      },
+      {
+        "command": "cacheTimer.editKeepDuration",
+        "title": "Cache Timer: Edit Keep Duration"
+      },
+      {
+        "command": "cacheTimer.refresh",
+        "title": "Cache Timer: Refresh",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "cacheTimer.refresh",
+          "when": "view == cacheTimer.sidebar",
+          "group": "navigation"
+        },
         {
           "command": "cacheTimer.openSettings",
           "when": "view == cacheTimer.sidebar",
@@ -66,8 +80,14 @@
       "properties": {
         "cacheTimer.ttlSeconds": {
           "type": "number",
-          "default": 300,
-          "description": "Cache time-to-live in seconds (default: 300 = 5 minutes)"
+          "default": 280,
+          "description": "Cache time-to-live in seconds (default: 280 = 4 minutes 40 seconds)"
+        },
+        "cacheTimer.cacheKeepDurationSeconds": {
+          "type": "number",
+          "default": 1800,
+          "minimum": 60,
+          "description": "Total duration for cache-keep auto-ping in seconds (default: 1800 = 30 minutes)"
         }
       }
     }

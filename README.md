@@ -10,7 +10,7 @@ A VS Code / Cursor extension that tracks the 5-minute prompt cache TTL for your 
 - **Chat titles from Cursor** — reads the actual chat titles from Cursor's internal database
 - **Expiry alerts** — warning notification at 30s remaining, error notification when cache expires
 - **Auto-detection** — watches Cursor's agent transcript files and resets the timer when the assistant responds
-- **Configurable TTL** — defaults to 300 seconds (5 minutes), adjustable via settings
+- **Configurable TTL** — defaults to 280 seconds (4 minutes 40 seconds), adjustable via settings
 - **Settings gear** — click the gear icon in the sidebar title bar to open extension settings
 
 ## How it works
@@ -18,6 +18,16 @@ A VS Code / Cursor extension that tracks the 5-minute prompt cache TTL for your 
 The extension monitors `~/.cursor/projects/<workspace-slug>/agent-transcripts/` for `.jsonl` file changes. When a new assistant message is detected, the cache timer for that chat resets to the configured TTL and begins counting down.
 
 Chat titles are read from Cursor's workspace-specific SQLite database (`state.vscdb`) and refreshed every 10 seconds.
+
+## Installation (from VSIX)
+
+1. Get a `.vsix` file (e.g. a release asset named `cache-timer-extension-<version>.vsix`, or build one locally with `make package` in this repo).
+2. Install it using one of the following:
+   - **Command line (Cursor):** `cursor --install-extension /path/to/cache-timer-extension-<version>.vsix`
+   - **Command line (VS Code):** `code --install-extension /path/to/cache-timer-extension-<version>.vsix`
+   - **UI:** open **Extensions**, click **`...`** on the Extensions view title bar, choose **Install from VSIX...**, and pick the file.
+
+Restart the editor if the extension does not activate immediately.
 
 ## Installation (development)
 
@@ -32,7 +42,7 @@ Then press **F5** in Cursor/VS Code to launch the Extension Development Host.
 
 | Setting | Default | Description |
 |---|---|---|
-| `cacheTimer.ttlSeconds` | `300` | Cache time-to-live in seconds |
+| `cacheTimer.ttlSeconds` | `280` | Cache time-to-live in seconds |
 
 ## Commands
 

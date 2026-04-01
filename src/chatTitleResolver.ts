@@ -28,8 +28,13 @@ export class ChatTitleResolver implements vscode.Disposable {
   >();
   readonly onDidRefresh = this._onDidRefresh.event;
 
-  constructor() {
+  constructor(private readonly log: vscode.OutputChannel) {
     this.dbPath = this.findWorkspaceStateDb();
+    if (this.dbPath) {
+      this.log.appendLine(`[ChatTitleResolver] DB path: ${this.dbPath}`);
+    } else {
+      this.log.appendLine("[ChatTitleResolver] Could not find workspace state.vscdb");
+    }
     this.refreshSync();
     this.refreshInterval = setInterval(() => this.refreshAsync(), 5_000);
   }
@@ -45,10 +50,13 @@ export class ChatTitleResolver implements vscode.Disposable {
   private findWorkspaceStateDb(): string | undefined {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) {
+      this.log.appendLine("[ChatTitleResolver] No workspace folders open");
       return undefined;
     }
 
     const workspaceUri = folders[0].uri.toString();
+    this.log.appendLine(`[ChatTitleResolver] Looking for workspace URI: ${workspaceUri}`);
+
     const storageRoot = path.join(
       os.homedir(),
       ".config",
@@ -58,6 +66,7 @@ export class ChatTitleResolver implements vscode.Disposable {
     );
 
     if (!fs.existsSync(storageRoot)) {
+      this.log.appendLine(`[ChatTitleResolver] Storage root does not exist: ${storageRoot}`);
       return undefined;
     }
 
@@ -84,8 +93,8 @@ export class ChatTitleResolver implements vscode.Disposable {
           continue;
         }
       }
-    } catch {
-      // Storage root may not exist
+    } catch (err) {
+      this.log.appendLine(`[ChatTitleResolver] Error scanning storage root: ${err}`);
     }
 
     return undefined;
@@ -120,8 +129,9 @@ export class ChatTitleResolver implements vscode.Disposable {
         encoding: "utf-8",
       });
       this.parseComposerData(stdout);
-    } catch {
-      // sqlite3 may not be available or DB locked
+      this.log.appendLine(`[ChatTitleResolver] Loaded ${this.titleCache.size} title(s) from DB`);
+    } catch (err) {
+      this.log.appendLine(`[ChatTitleResolver] sqlite3 query failed (is sqlite3 installed?): ${err}`);
     }
   }
 

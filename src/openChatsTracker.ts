@@ -29,6 +29,10 @@ export class OpenChatsTracker implements vscode.Disposable {
     return this.openIds;
   }
 
+  async forcePoll(): Promise<void> {
+    await this.poll();
+  }
+
   private async poll(): Promise<void> {
     try {
       const commands = await vscode.commands.getCommands(true);

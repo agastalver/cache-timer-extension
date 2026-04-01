@@ -11,6 +11,7 @@ export interface ChatTimer {
 
 export class TimerManager implements vscode.Disposable {
   private timers = new Map<string, ChatTimer>();
+  private streamingSources = new Map<string, Set<string>>();
   private tickInterval: ReturnType<typeof setInterval> | undefined;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -22,7 +23,7 @@ export class TimerManager implements vscode.Disposable {
   get ttlSeconds(): number {
     return vscode.workspace
       .getConfiguration("cacheTimer")
-      .get<number>("ttlSeconds", 300);
+      .get<number>("ttlSeconds", 280);
   }
 
   constructor() {
@@ -52,6 +53,28 @@ export class TimerManager implements vscode.Disposable {
     existing.remainingSeconds = this.ttlSeconds;
     existing.isExpired = false;
     this._onDidChange.fire();
+  }
+
+  setStreaming(chatId: string, streaming: boolean, source = "default"): void {
+    let sources = this.streamingSources.get(chatId);
+    if (streaming) {
+      if (!sources) {
+        sources = new Set();
+        this.streamingSources.set(chatId, sources);
+      }
+      sources.add(source);
+    } else if (sources) {
+      sources.delete(source);
+      if (sources.size === 0) {
+        this.streamingSources.delete(chatId);
+      }
+    }
+    this._onDidChange.fire();
+  }
+
+  isStreaming(chatId: string): boolean {
+    const sources = this.streamingSources.get(chatId);
+    return !!sources && sources.size > 0;
   }
 
   updateTitle(chatId: string, title: string): void {

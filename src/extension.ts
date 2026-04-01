@@ -5,24 +5,36 @@ import { ChatTitleResolver } from "./chatTitleResolver";
 import { StatusBar } from "./statusBar";
 import { SidebarProvider } from "./sidebarProvider";
 import { OpenChatsTracker } from "./openChatsTracker";
+import { CacheKeepManager } from "./cacheKeepManager";
+import { AiTrackingDbWatcher } from "./aiTrackingDbWatcher";
 
 export async function activate(context: vscode.ExtensionContext) {
+  const log = vscode.window.createOutputChannel("Cache Timer");
+  log.appendLine(`[Activate] Cache Timer v${context.extension.packageJSON.version}`);
+
   const timerManager = new TimerManager();
-  const titleResolver = new ChatTitleResolver();
-  const transcriptWatcher = new TranscriptWatcher(titleResolver);
+  const titleResolver = new ChatTitleResolver(log);
+  const transcriptWatcher = new TranscriptWatcher(titleResolver, log);
   const openChatsTracker = new OpenChatsTracker();
+  const aiTrackingWatcher = new AiTrackingDbWatcher(log);
+  const cacheKeepManager = new CacheKeepManager(timerManager);
   const statusBar = new StatusBar(timerManager, openChatsTracker);
   const sidebarProvider = new SidebarProvider(
     context.extensionUri,
     timerManager,
-    openChatsTracker
+    openChatsTracker,
+    cacheKeepManager,
+    transcriptWatcher
   );
 
   context.subscriptions.push(
+    log,
     timerManager,
     titleResolver,
     transcriptWatcher,
     openChatsTracker,
+    aiTrackingWatcher,
+    cacheKeepManager,
     statusBar,
     sidebarProvider
   );
@@ -36,6 +48,36 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     transcriptWatcher.onChatActivity((event) => {
       timerManager.touchTimer(event.chatId, event.timestamp);
+    })
+  );
+
+  context.subscriptions.push(
+    transcriptWatcher.onStreamingChange(({ chatId, streaming }) => {
+      timerManager.setStreaming(chatId, streaming, "transcript");
+    })
+  );
+
+  context.subscriptions.push(
+    aiTrackingWatcher.onStreamingChange(({ chatId, streaming }) => {
+      timerManager.setStreaming(chatId, streaming, "aiTracking");
+    })
+  );
+
+  context.subscriptions.push(
+    aiTrackingWatcher.onChatActivity(({ chatId, timestamp }) => {
+      timerManager.touchTimer(chatId, timestamp);
+    })
+  );
+
+  // Auto-reset cache keep timer when the user manually sends a message
+  context.subscriptions.push(
+    transcriptWatcher.onUserMessage(({ chatId, messageText }) => {
+      if (
+        cacheKeepManager.isKeeping(chatId) &&
+        messageText !== CacheKeepManager.KEEP_MESSAGE
+      ) {
+        cacheKeepManager.resetKeep(chatId);
+      }
     })
   );
 
@@ -91,14 +133,6 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("cacheTimer.resetAll", () => {
-      timerManager.resetAll();
-      warnedChats.clear();
-      vscode.window.showInformationMessage("Cache timers cleared.");
-    })
-  );
-
-  context.subscriptions.push(
     vscode.commands.registerCommand("cacheTimer.showPanel", () => {
       vscode.commands.executeCommand("cacheTimer.sidebar.focus");
     })
@@ -116,37 +150,59 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("cacheTimer.openSettings", async () => {
-      const config = vscode.workspace.getConfiguration("cacheTimer");
-      const currentTtl = config.get<number>("ttlSeconds", 300);
-
-      const value = await vscode.window.showInputBox({
-        title: "Cache Timer — TTL (seconds)",
-        prompt: "Cache time-to-live in seconds",
-        value: String(currentTtl),
-        validateInput: (v) => {
-          const n = Number(v);
-          if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
-            return "Enter a positive integer";
-          }
-          return undefined;
-        },
-      });
-
-      if (value !== undefined) {
-        await config.update(
-          "ttlSeconds",
-          Number(value),
-          vscode.ConfigurationTarget.Global
-        );
-        vscode.window.showInformationMessage(
-          `Cache TTL set to ${value} seconds.`
-        );
-      }
+    vscode.commands.registerCommand("cacheTimer.refresh", async () => {
+      transcriptWatcher.forceRescan();
+      await openChatsTracker.forcePoll();
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cacheTimer.openSettings", () => {
+      vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "cacheTimer"
+      );
+    })
+  );
+
+  const settingEditors: Array<{
+    command: string;
+    key: string;
+    title: string;
+    defaultVal: number;
+    min: number;
+  }> = [
+    { command: "cacheTimer.editTtl", key: "ttlSeconds", title: "Cache TTL (seconds)", defaultVal: 280, min: 1 },
+    { command: "cacheTimer.editKeepDuration", key: "cacheKeepDurationSeconds", title: "Cache Keep Duration (seconds)", defaultVal: 1800, min: 60 },
+  ];
+
+  for (const s of settingEditors) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(s.command, async () => {
+        const config = vscode.workspace.getConfiguration("cacheTimer");
+        const current = config.get<number>(s.key, s.defaultVal);
+        const value = await vscode.window.showInputBox({
+          title: `Cache Timer — ${s.title}`,
+          prompt: s.title,
+          value: String(current),
+          validateInput: (v) => {
+            const n = Number(v);
+            if (!Number.isFinite(n) || n < s.min || !Number.isInteger(n)) {
+              return `Enter an integer >= ${s.min}`;
+            }
+            return undefined;
+          },
+        });
+        if (value !== undefined) {
+          await config.update(s.key, Number(value), vscode.ConfigurationTarget.Global);
+          vscode.window.showInformationMessage(`${s.title} set to ${value}.`);
+        }
+      })
+    );
+  }
+
   await transcriptWatcher.start();
+  await aiTrackingWatcher.start();
 }
 
 export function deactivate() {
