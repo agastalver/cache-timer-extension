@@ -124,7 +124,7 @@ export class ChatTitleResolver implements vscode.Disposable {
     const query =
       "SELECT value FROM ItemTable WHERE key = 'composer.composerData'";
     try {
-      const stdout = execFileSync("sqlite3", [this.dbPath, query], {
+      const stdout = execFileSync("sqlite3", [`file://${this.dbPath}?immutable=1`, query], {
         timeout: 5000,
         encoding: "utf-8",
       });
@@ -143,7 +143,7 @@ export class ChatTitleResolver implements vscode.Disposable {
       "SELECT value FROM ItemTable WHERE key = 'composer.composerData'";
     execFile(
       "sqlite3",
-      [this.dbPath, query],
+      [`file://${this.dbPath}?immutable=1`, query],
       { timeout: 5000 },
       (err, stdout) => {
         if (err || !stdout.trim()) {

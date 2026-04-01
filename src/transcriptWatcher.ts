@@ -99,6 +99,19 @@ export class TranscriptWatcher implements vscode.Disposable {
     this.rescanInterval = setInterval(() => this.rescan(), 10_000);
   }
 
+  /**
+   * Cursor stores transcripts under ~/.cursor/projects/<slug>/agent-transcripts.
+   * On Unix, slug is the workspace path with the leading slash removed and `/`
+   * replaced by `-`. Windows paths use backslashes and a drive prefix (`C:\...`);
+   * the old `replace(/\//g, "-")` left the full path intact, which produced invalid
+   * joined paths like .../projects/c:\Users\...\agent-transcripts.
+   */
+  private workspacePathToSlug(workspacePath: string): string {
+    const normalized = path.normalize(workspacePath).replace(/\\/g, "/");
+    const parts = normalized.split("/").filter(Boolean);
+    return parts.map((segment) => segment.replace(/:$/, "")).join("-");
+  }
+
   private resolveTranscriptDir(): string | undefined {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) {
@@ -106,7 +119,7 @@ export class TranscriptWatcher implements vscode.Disposable {
     }
 
     const workspacePath = folders[0].uri.fsPath;
-    const slug = workspacePath.replace(/^\//, "").replace(/\//g, "-");
+    const slug = this.workspacePathToSlug(workspacePath);
     const cursorHome = path.join(os.homedir(), ".cursor");
 
     this.log.appendLine(`[TranscriptWatcher] Workspace path: ${workspacePath}`);
