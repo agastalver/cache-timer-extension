@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { ChatTitleResolver } from "./chatTitleResolver";
-import { getCursorHome } from "./hostPaths";
+import { getCursorHome, isWSL } from "./hostPaths";
 
 export interface TranscriptEvent {
   chatId: string;
@@ -109,7 +109,7 @@ export class TranscriptWatcher implements vscode.Disposable {
   private workspacePathToSlug(workspacePath: string): string {
     const normalized = path.normalize(workspacePath).replace(/\\/g, "/");
     const parts = normalized.split("/").filter(Boolean);
-    return parts.map((segment) => segment.replace(/:$/, "")).join("-");
+    return parts.map((segment) => segment.replace(/:$/, "").replace(/\./g, "-")).join("-");
   }
 
   private resolveTranscriptDir(): string | undefined {
@@ -118,14 +118,50 @@ export class TranscriptWatcher implements vscode.Disposable {
       return undefined;
     }
 
-    const workspacePath = folders[0].uri.fsPath;
+    let workspacePath = folders[0].uri.fsPath;
+
+    if (isWSL()) {
+      const distro = process.env.WSL_DISTRO_NAME ?? "Ubuntu";
+      workspacePath = `//wsl.localhost/${distro}${workspacePath}`;
+      this.log.appendLine(`[TranscriptWatcher] WSL detected, distro=${distro}`);
+    }
+
     const slug = this.workspacePathToSlug(workspacePath);
     const cursorHome = getCursorHome(this.log);
 
     this.log.appendLine(`[TranscriptWatcher] Workspace path: ${workspacePath}`);
     this.log.appendLine(`[TranscriptWatcher] Computed slug: ${slug}`);
 
-    return path.join(cursorHome, "projects", slug, "agent-transcripts");
+    const primary = path.join(cursorHome, "projects", slug, "agent-transcripts");
+    if (fs.existsSync(primary)) {
+      return primary;
+    }
+
+    // Fallback: scan projects/ for a directory whose name ends with the
+    // workspace-path slug portion. Handles UNC prefix variations (wsl$ vs
+    // wsl.localhost) and other naming edge cases.
+    const localSlug = this.workspacePathToSlug(folders[0].uri.fsPath);
+    const projectsDir = path.join(cursorHome, "projects");
+    try {
+      if (fs.existsSync(projectsDir)) {
+        for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+          if (!entry.isDirectory()) {
+            continue;
+          }
+          if (entry.name.endsWith(localSlug)) {
+            const candidate = path.join(projectsDir, entry.name, "agent-transcripts");
+            if (fs.existsSync(candidate)) {
+              this.log.appendLine(`[TranscriptWatcher] Fallback match: ${entry.name}`);
+              return candidate;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.log.appendLine(`[TranscriptWatcher] Fallback scan error: ${err}`);
+    }
+
+    return primary;
   }
 
   private async scanExisting(): Promise<number> {

@@ -6,7 +6,7 @@ import { execSync } from "child_process";
 let cachedWindowsHome: string | undefined | null;
 let cachedWindowsAppData: string | undefined | null;
 
-function isWSL(): boolean {
+export function isWSL(): boolean {
   return vscode.env.remoteName === "wsl";
 }
 
