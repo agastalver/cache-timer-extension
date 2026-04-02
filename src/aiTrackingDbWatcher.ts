@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as os from "os";
 import * as fs from "fs";
 import { execFile } from "child_process";
+import { getCursorHome } from "./hostPaths";
 
-const DB_REL_PATH = path.join(".cursor", "ai-tracking", "ai-code-tracking.db");
+const DB_REL_PATH = path.join("ai-tracking", "ai-code-tracking.db");
 const POLL_INTERVAL_MS = 3_000;
 const INITIAL_LOOKBACK_MS = 10_000;
 
@@ -33,7 +33,7 @@ export class AiTrackingDbWatcher implements vscode.Disposable {
   readonly onChatActivity = this._onChatActivity.event;
 
   constructor(private readonly log: vscode.OutputChannel) {
-    this.dbPath = path.join(os.homedir(), DB_REL_PATH);
+    this.dbPath = path.join(getCursorHome(this.log), DB_REL_PATH);
   }
 
   async start(): Promise<void> {

@@ -1,35 +1,54 @@
 # Cache Timer Extension for Cursor
 
-A VS Code / Cursor extension that tracks the 5-minute prompt cache TTL for your LLM chat sessions.
+A VS Code / Cursor extension that tracks the prompt cache TTL for your LLM chat sessions.
 
 ## Features
 
-- **Status bar countdown** — shows `Cache: M:SS` for the most recent chat, color-coded green/yellow/red as time expires
-- **Sidebar panel** — lists all tracked chats grouped by Today, Yesterday, Last Week, and Older (collapsed by default)
+- **Status bar countdown** — each open chat gets its own status bar item showing `Cache: M:SS`, color-coded green/yellow/red as time expires
+- **Sidebar panel** — lists all tracked chats grouped by Today, Last 7 Days, and Older
 - **Click to open chat** — click any chat card in the sidebar to open that conversation in Cursor
-- **Chat titles from Cursor** — reads the actual chat titles from Cursor's internal database
-- **Expiry alerts** — warning notification at 30s remaining, error notification when cache expires
-- **Auto-detection** — watches Cursor's agent transcript files and resets the timer when the assistant responds
-- **Configurable TTL** — defaults to 280 seconds (4 minutes 40 seconds), adjustable via settings
-- **Settings gear** — click the gear icon in the sidebar title bar to open extension settings
+- **Chat titles** — displays the actual chat titles assigned by Cursor
+- **Streaming detection** — shows a streaming indicator when the assistant is actively responding
+- **Expiry alerts** — warning notification at 30 seconds remaining, error notification when the cache expires
+- **Cache Keep** — per-chat toggle that nudges you to send a keep-alive message before the cache TTL expires, extending the cache window for a configurable duration (default 30 minutes)
+- **Auto-detection** — watches Cursor's agent transcript files and folder for changes; resets the timer when a new assistant response is detected
+- **Configurable** — adjust both the cache TTL and keep-alive duration via settings or sidebar commands
 
-## How it works
+## Installation
 
-The extension monitors `~/.cursor/projects/<workspace-slug>/agent-transcripts/` for `.jsonl` file changes. When a new assistant message is detected, the cache timer for that chat resets to the configured TTL and begins counting down.
+### From the Marketplace
 
-Chat titles are read from Cursor's workspace-specific SQLite database (`state.vscdb`) and refreshed every 10 seconds.
+Search for **Cache Timer** in the Extensions view and click **Install**.
 
-## Installation (from VSIX)
+### From VSIX
 
-1. Get a `.vsix` file (e.g. a release asset named `cache-timer-extension-<version>.vsix`, or build one locally with `make package` in this repo).
+1. Get a `.vsix` file (e.g. a release asset or build one locally with `make package`).
 2. Install it using one of the following:
-   - **Command line (Cursor):** `cursor --install-extension /path/to/cache-timer-extension-<version>.vsix`
-   - **Command line (VS Code):** `code --install-extension /path/to/cache-timer-extension-<version>.vsix`
+   - **Command line (Cursor):** `cursor --install-extension cache-timer-extension-<version>.vsix`
+   - **Command line (VS Code):** `code --install-extension cache-timer-extension-<version>.vsix`
    - **UI:** open **Extensions**, click **`...`** on the Extensions view title bar, choose **Install from VSIX...**, and pick the file.
 
 Restart the editor if the extension does not activate immediately.
 
-## Installation (development)
+## Settings
+
+| Setting | Default | Description |
+|---|---|---|
+| `cacheTimer.ttlSeconds` | `280` | Cache time-to-live in seconds (4 min 40 sec) |
+| `cacheTimer.cacheKeepDurationSeconds` | `1800` | Duration of a cache-keep session in seconds (30 min). Minimum: 60 |
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `Cache Timer: Show Panel` | Opens the sidebar timer panel |
+| `Cache Timer: Open Chat` | Opens the selected chat in Cursor |
+| `Cache Timer: Open Settings` | Opens extension settings |
+| `Cache Timer: Edit TTL` | Prompts to change the cache TTL value |
+| `Cache Timer: Edit Keep Duration` | Prompts to change the cache-keep session duration |
+| `Cache Timer: Refresh` | Manually refreshes timer data and sidebar |
+
+## Development
 
 ```bash
 pnpm install
@@ -37,17 +56,3 @@ pnpm run build
 ```
 
 Then press **F5** in Cursor/VS Code to launch the Extension Development Host.
-
-## Settings
-
-| Setting | Default | Description |
-|---|---|---|
-| `cacheTimer.ttlSeconds` | `280` | Cache time-to-live in seconds |
-
-## Commands
-
-| Command | Description |
-|---|---|
-| `Cache Timer: Reset All Timers` | Clears all tracked timers |
-| `Cache Timer: Show Panel` | Opens the sidebar timer panel |
-| `Cache Timer: Open Settings` | Opens extension settings |

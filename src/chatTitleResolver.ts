@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import { execFileSync, execFile } from "child_process";
+import { getCursorConfigHome } from "./hostPaths";
 
 interface ComposerHead {
   composerId: string;
@@ -58,9 +58,7 @@ export class ChatTitleResolver implements vscode.Disposable {
     this.log.appendLine(`[ChatTitleResolver] Looking for workspace URI: ${workspaceUri}`);
 
     const storageRoot = path.join(
-      os.homedir(),
-      ".config",
-      "Cursor",
+      getCursorConfigHome(this.log),
       "User",
       "workspaceStorage"
     );

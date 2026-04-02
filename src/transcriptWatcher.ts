@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import { ChatTitleResolver } from "./chatTitleResolver";
+import { getCursorHome } from "./hostPaths";
 
 export interface TranscriptEvent {
   chatId: string;
@@ -120,7 +120,7 @@ export class TranscriptWatcher implements vscode.Disposable {
 
     const workspacePath = folders[0].uri.fsPath;
     const slug = this.workspacePathToSlug(workspacePath);
-    const cursorHome = path.join(os.homedir(), ".cursor");
+    const cursorHome = getCursorHome(this.log);
 
     this.log.appendLine(`[TranscriptWatcher] Workspace path: ${workspacePath}`);
     this.log.appendLine(`[TranscriptWatcher] Computed slug: ${slug}`);
