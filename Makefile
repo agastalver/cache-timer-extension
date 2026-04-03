@@ -30,7 +30,7 @@ package: build-prod
 		const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); \
 		delete p.scripts['vscode:prepublish']; \
 		fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');"
-	vsce package --no-dependencies --allow-missing-repository --skip-license || { mv package.json.bak package.json; exit 1; }
+	vsce package --no-dependencies --allow-missing-repository || { mv package.json.bak package.json; exit 1; }
 	@mv package.json.bak package.json
 	@echo "Packaged: $(VSIX)"
 

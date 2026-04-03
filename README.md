@@ -30,6 +30,10 @@ Search for **Cache Timer** in the Extensions view and click **Install**.
 
 Restart the editor if the extension does not activate immediately.
 
+## Known limitations
+
+- **WSL projects:** Some users report that the extension does not work correctly when the workspace or project lives under WSL (Windows Subsystem for Linux). Timers and chat detection may not behave as expected in that setup. If you rely on WSL-hosted paths, consider tracking this as a known gap until a fix lands.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -56,3 +60,7 @@ pnpm run build
 ```
 
 Then press **F5** in Cursor/VS Code to launch the Extension Development Host.
+
+## License
+
+Licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0`). The full license text is shipped with the extension as `LICENSE`.

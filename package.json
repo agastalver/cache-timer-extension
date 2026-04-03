@@ -2,8 +2,9 @@
   "name": "cache-timer-extension",
   "displayName": "Cache Timer",
   "description": "Shows countdown timers for the 5-minute LLM prompt cache TTL in Cursor chats",
-  "version": "0.1.8",
+  "version": "1.0.0",
   "publisher": "agastalver",
+  "license": "AGPL-3.0",
   "engines": {
     "vscode": "^1.85.0"
   },
