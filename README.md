@@ -2,6 +2,14 @@
 
 A VS Code / Cursor extension that tracks the prompt cache TTL for your LLM chat sessions.
 
+## Screenshot
+
+![Cache Timer overview](screenshot.png)
+
+1. **Sidebar panel** — tracked chats with progress and countdown; each card has a **Cache Keep** control you can use to get nudged before the TTL runs out (see [Features](#features)).
+2. **Expiry alert (≤30s)** — a notification when a chat’s cache is about to expire (there is also an alert when it has expired).
+3. **Status bar** — one compact timer per open chat (`Cache: M:SS`), color-coded with the same urgency as the panel.
+
 ## Features
 
 - **Status bar countdown** — each open chat gets its own status bar item showing `Cache: M:SS`, color-coded green/yellow/red as time expires
@@ -54,12 +62,28 @@ Restart the editor if the extension does not activate immediately.
 
 ## Development
 
+Install dependencies and build:
+
 ```bash
 pnpm install
 pnpm run build
 ```
 
+**`package.json` scripts**
+
+| Script | Purpose |
+|--------|---------|
+| `pnpm run build` | Development bundle (`dist/extension.js`) |
+| `pnpm run watch` | Rebuild on file changes |
+| `pnpm run vscode:prepublish` | Production (minified) build used before packaging |
+
+**Makefile** (optional): `make install`, `make build`, `make watch`, `make package` (builds a `.vsix` via `vsce`), `make dev` (build + symlink into Cursor’s extensions folder for local testing).
+
 Then press **F5** in Cursor/VS Code to launch the Extension Development Host.
+
+## Marketplace vs this README
+
+On the marketplace **listing**, users mainly see the extension **name** (`displayName` in `package.json`), **icon**, and the **short description** (the `description` field — one line). The **full README** is what appears on the extension **detail page** as the long description when you publish the extension (for example with `vsce publish` or the equivalent for your registry). Keep screenshots and setup notes here so that page stays clear for new users.
 
 ## License
 
