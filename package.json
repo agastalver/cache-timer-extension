@@ -5,6 +5,10 @@
   "version": "1.0.0",
   "publisher": "agastalver",
   "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agastalver/cache-timer-extension.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
