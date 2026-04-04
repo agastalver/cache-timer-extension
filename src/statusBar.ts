@@ -4,6 +4,26 @@ import { OpenChatsTracker } from "./openChatsTracker";
 
 const BASE_PRIORITY = 100;
 
+/**
+ * Status bar text parses `$(id)` as ThemeIcons and `[text](command:id)` as
+ * links. Chat titles that are raw user messages can contain these patterns and
+ * would disappear or render as garbled icons/links. Insert zero-width spaces
+ * to break `$(` and `[` tokens. Newlines are collapsed to spaces.
+ */
+function sanitizeStatusBarLabel(raw: string): string {
+  let s = raw.replace(/\r\n|\r|\n/g, " ").replace(/\s+/g, " ").trim();
+  s = s.replace(/\$\(/g, "$\u200b(");
+  s = s.replace(/\[/g, "\u200b[");
+  return s;
+}
+
+function truncateForStatusBar(s: string, maxLen: number): string {
+  if (s.length <= maxLen) {
+    return s;
+  }
+  return s.slice(0, maxLen - 2) + "..";
+}
+
 export class StatusBar implements vscode.Disposable {
   private items = new Map<string, vscode.StatusBarItem>();
   private disposables: vscode.Disposable[] = [];
@@ -53,10 +73,11 @@ export class StatusBar implements vscode.Disposable {
         this.items.set(chatId, item);
       }
 
-      const truncatedTitle =
-        timer.title.length > 20
-          ? timer.title.slice(0, 18) + ".."
-          : timer.title;
+      const labelTitle = truncateForStatusBar(
+        sanitizeStatusBarLabel(timer.title),
+        20
+      );
+      const tooltipTitle = sanitizeStatusBarLabel(timer.title);
 
       const isStreaming = this.timerManager.isStreaming(chatId);
 
@@ -64,12 +85,12 @@ export class StatusBar implements vscode.Disposable {
         const minutes = Math.floor(timer.remainingSeconds / 60);
         const seconds = timer.remainingSeconds % 60;
         const display = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-        item.text = `$(sync~spin) ${truncatedTitle}: ${display}`;
-        item.tooltip = `"${timer.title}" — streaming (${display})\nClick to open chat`;
+        item.text = `$(sync~spin) ${labelTitle}: ${display}`;
+        item.tooltip = `"${tooltipTitle}" — streaming (${display})\nClick to open chat`;
         item.backgroundColor = undefined;
       } else if (timer.isExpired) {
-        item.text = `$(clock) ${truncatedTitle}: expired`;
-        item.tooltip = `"${timer.title}" — cache expired\nClick to open chat`;
+        item.text = `$(clock) ${labelTitle}: expired`;
+        item.tooltip = `"${tooltipTitle}" — cache expired\nClick to open chat`;
         item.backgroundColor = new vscode.ThemeColor(
           "statusBarItem.errorBackground"
         );
@@ -77,8 +98,8 @@ export class StatusBar implements vscode.Disposable {
         const minutes = Math.floor(timer.remainingSeconds / 60);
         const seconds = timer.remainingSeconds % 60;
         const display = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-        item.text = `$(clock) ${truncatedTitle}: ${display}`;
-        item.tooltip = `"${timer.title}" — ${display} remaining\nClick to open chat`;
+        item.text = `$(clock) ${labelTitle}: ${display}`;
+        item.tooltip = `"${tooltipTitle}" — ${display} remaining\nClick to open chat`;
 
         if (timer.remainingSeconds <= 60) {
           item.backgroundColor = new vscode.ThemeColor(

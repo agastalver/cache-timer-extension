@@ -3,7 +3,7 @@
   "displayName": "Cache Timer",
   "description": "Shows countdown timers for the 5-minute LLM prompt cache TTL in Cursor chats",
   "icon": "media/icon.png",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "agastalver",
   "license": "AGPL-3.0",
   "repository": {
@@ -114,6 +114,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "@vscode/vsce-sign",
+      "keytar"
     ]
   }
 }
