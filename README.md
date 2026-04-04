@@ -1,6 +1,10 @@
 # Cache Timer for Cursor
 
-A Cursor extension that tracks the prompt cache TTL for your agent chats. It follows Cursor’s agent transcript layout under `.cursor/` (for example `agent-transcripts/`) so timers stay aligned with what the agents are doing in your workspace.
+[![CI](https://img.shields.io/github/actions/workflow/status/agastalver/cache-timer-extension/ci.yml?branch=main)](https://github.com/agastalver/cache-timer-extension/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/agastalver/cache-timer-extension)](./LICENSE)
+[![Open VSX](https://img.shields.io/open-vsx/v/agastalver/cache-timer-extension)](https://open-vsx.org/extension/agastalver/cache-timer-extension)
+
+**Cache Timer** shows a per-chat countdown for the LLM prompt cache window in Cursor agent chats by reading Cursor’s agent transcript layout under `.cursor/` (for example `agent-transcripts/`).
 
 ## Screenshot
 
@@ -22,11 +26,33 @@ A Cursor extension that tracks the prompt cache TTL for your agent chats. It fol
 - **Auto-detection** — watches Cursor's agent transcript files and folder for changes; resets the timer when a new assistant response is detected
 - **Configurable** — adjust both the cache TTL and keep-alive duration via settings or sidebar commands
 
+## Why trust this extension?
+
+- **Open source** — source is in this repository; you can review what runs on your machine.
+- **Distributed via registries** — install from the Cursor/VS Code extension flow or from [Open VSX](https://open-vsx.org/extension/agastalver/cache-timer-extension) once published there.
+- **No bundled telemetry** — the extension does not add its own analytics or phone home; behavior is local file watching and UI.
+- **Responsible disclosure** — see [SECURITY.md](SECURITY.md) for how to report issues privately.
+- **Automated checks** — CI runs on `main` (see badge above). Open VSX releases are published from GitHub Actions when a version tag is pushed from `main` (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+
+## Privacy and security
+
+- **Local data use** — the extension reads workspace files (under `.cursor/` and related paths) to find transcripts and titles so it can show timers. It does not upload that content to a remote service as part of its design.
+- **No extra network** — extension code does not perform arbitrary outbound HTTP requests for core behavior. The sidebar uses a webview; messaging stays between the webview and the extension host.
+- **Permissions** — follow Cursor’s extension permission prompts; they reflect what the host allows the extension to access in your workspace.
+
+Details and scope: [SECURITY.md](SECURITY.md).
+
 ## Installation
+
+**Requirements:** VS Code API `^1.85.0` (see `engines` in [package.json](package.json)). Works where Cursor supports that engine.
 
 ### From the Marketplace
 
 In Cursor, open the Extensions view, search for **Cache Timer**, and click **Install**.
+
+### From Open VSX
+
+[Cache Timer on Open VSX](https://open-vsx.org/extension/agastalver/cache-timer-extension) (when published).
 
 ### From VSIX
 
@@ -80,10 +106,18 @@ pnpm run build
 
 Press **F5** in Cursor to launch the Extension Development Host and try the extension.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (including **release tagging** for Open VSX).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## Marketplace vs this README
 
 On the marketplace **listing**, users mainly see the extension **name** (`displayName` in `package.json`), **icon**, and the **short description** (the `description` field — one line). The **full README** is what appears on the extension **detail page** as the long description when you publish. Keep screenshots and setup notes here so that page stays clear for new users.
 
 ## License
 
-Licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0`). The full license text is shipped with the extension as `LICENSE`.
+Licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0`). The full license text is shipped with the extension as [LICENSE](LICENSE).
