@@ -1,6 +1,6 @@
-# Cache Timer Extension for Cursor
+# Cache Timer for Cursor
 
-A VS Code / Cursor extension that tracks the prompt cache TTL for your LLM chat sessions.
+A Cursor extension that tracks the prompt cache TTL for your agent chats. It follows Cursor’s agent transcript layout under `.cursor/` (for example `agent-transcripts/`) so timers stay aligned with what the agents are doing in your workspace.
 
 ## Screenshot
 
@@ -26,17 +26,16 @@ A VS Code / Cursor extension that tracks the prompt cache TTL for your LLM chat 
 
 ### From the Marketplace
 
-Search for **Cache Timer** in the Extensions view and click **Install**.
+In Cursor, open the Extensions view, search for **Cache Timer**, and click **Install**.
 
 ### From VSIX
 
 1. Get a `.vsix` file (e.g. a release asset or build one locally with `make package`).
 2. Install it using one of the following:
-   - **Command line (Cursor):** `cursor --install-extension cache-timer-extension-<version>.vsix`
-   - **Command line (VS Code):** `code --install-extension cache-timer-extension-<version>.vsix`
-   - **UI:** open **Extensions**, click **`...`** on the Extensions view title bar, choose **Install from VSIX...**, and pick the file.
+   - **Command line:** `cursor --install-extension cache-timer-extension-<version>.vsix`
+   - **UI:** in Cursor, open **Extensions**, click **`...`** on the Extensions view title bar, choose **Install from VSIX...**, and pick the file.
 
-Restart the editor if the extension does not activate immediately.
+Restart Cursor if the extension does not activate immediately.
 
 ## Known limitations
 
@@ -75,15 +74,15 @@ pnpm run build
 |--------|---------|
 | `pnpm run build` | Development bundle (`dist/extension.js`) |
 | `pnpm run watch` | Rebuild on file changes |
-| `pnpm run vscode:prepublish` | Production (minified) build used before packaging |
+| `pnpm run vscode:prepublish` | Production (minified) build used before packaging (standard script name from the extension toolchain) |
 
 **Makefile** (optional): `make install`, `make build`, `make watch`, `make package` (builds a `.vsix` via `vsce`), `make dev` (build + symlink into Cursor’s extensions folder for local testing).
 
-Then press **F5** in Cursor/VS Code to launch the Extension Development Host.
+Press **F5** in Cursor to launch the Extension Development Host and try the extension.
 
 ## Marketplace vs this README
 
-On the marketplace **listing**, users mainly see the extension **name** (`displayName` in `package.json`), **icon**, and the **short description** (the `description` field — one line). The **full README** is what appears on the extension **detail page** as the long description when you publish the extension (for example with `vsce publish` or the equivalent for your registry). Keep screenshots and setup notes here so that page stays clear for new users.
+On the marketplace **listing**, users mainly see the extension **name** (`displayName` in `package.json`), **icon**, and the **short description** (the `description` field — one line). The **full README** is what appears on the extension **detail page** as the long description when you publish. Keep screenshots and setup notes here so that page stays clear for new users.
 
 ## License
 

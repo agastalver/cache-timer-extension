@@ -69,7 +69,7 @@ export class OpenChatsTracker implements vscode.Disposable {
   }
 
   /**
-   * Try to order IDs using vscode.window.tabGroups (chat tabs may appear
+   * Try to order IDs using window.tabGroups (chat tabs may appear
    * as webview tabs). Falls back to the iteration order of the input set.
    */
   private orderByTabs(ids: Set<string>): string[] {
