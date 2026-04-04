@@ -3,6 +3,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/agastalver/cache-timer-extension/ci.yml?branch=main)](https://github.com/agastalver/cache-timer-extension/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/agastalver/cache-timer-extension)](./LICENSE)
 [![Open VSX](https://img.shields.io/open-vsx/v/agastalver/cache-timer-extension)](https://open-vsx.org/extension/agastalver/cache-timer-extension)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/adol)
 
 **Cache Timer** shows a per-chat countdown for the LLM prompt cache window in Cursor agent chats by reading Cursor’s agent transcript layout under `.cursor/` (for example `agent-transcripts/`).
 
