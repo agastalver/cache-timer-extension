@@ -1,4 +1,4 @@
-name: Release (Open VSX)
+name: Release (Open VSX + GitHub)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -45,10 +45,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Production build
-        run: pnpm run vscode:prepublish
+      - name: Build and package VSIX
+        id: pack
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "vsix_path=cache-timer-extension-${VERSION}.vsix" >> "$GITHUB_OUTPUT"
+          pnpm run vscode:prepublish
+          cp package.json package.json.bak
+          node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json','utf8')); delete p.scripts['vscode:prepublish']; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+          pnpm exec vsce package --no-dependencies --allow-missing-repository
+          mv package.json.bak package.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.vsix_path }}
+          generate_release_notes: true
 
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: pnpm exec ovsx publish --no-dependencies -p "$OVSX_PAT"
+        run: pnpm exec ovsx publish -p "$OVSX_PAT" "${{ steps.pack.outputs.vsix_path }}"

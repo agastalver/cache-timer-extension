@@ -32,7 +32,7 @@
 - **Distributed via registries** — install from the Cursor/VS Code extension flow or from [Open VSX](https://open-vsx.org/extension/agastalver/cache-timer-extension) once published there.
 - **No bundled telemetry** — the extension does not add its own analytics or phone home; behavior is local file watching and UI.
 - **Responsible disclosure** — see [SECURITY.md](SECURITY.md) for how to report issues privately.
-- **Automated checks** — CI runs on `main` (see badge above). Open VSX releases are published from GitHub Actions when a version tag is pushed from `main` (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+- **Automated checks** — CI runs on `main` (see badge above). Pushing a version tag from `main` runs a release workflow that uploads a **`.vsix`** to that tag’s **GitHub Release** and publishes to **Open VSX** (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Privacy and security
 

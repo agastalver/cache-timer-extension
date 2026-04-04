@@ -42,7 +42,7 @@ Open VSX publishing runs in GitHub Actions when you push a **version tag** whose
    git push origin vX.Y.Z
    ```
 
-3. The [Release (Open VSX)](.github/workflows/release-openvsx.yml) workflow builds and runs `ovsx publish`. Configure repository secret **`OVSX_PAT`** (Open VSX access token) in the repo settings.
+3. The [Release (Open VSX + GitHub)](.github/workflows/release-openvsx.yml) workflow packages a **`.vsix`**, creates a **GitHub Release** for that tag with the `.vsix` attached, then publishes **`ovsx publish`** to Open VSX. Configure repository secret **`OVSX_PAT`** (Open VSX access token) in the repo settings.
 
 **First-time Open VSX setup:** create an account at [open-vsx.org](https://open-vsx.org), accept the publisher agreement, create an access token, and ensure your namespace exists (for example `pnpm exec ovsx create-namespace <name> -p "$OVSX_PAT"` if needed).
 
