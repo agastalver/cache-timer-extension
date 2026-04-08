@@ -15,7 +15,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const timerManager = new TimerManager();
   const titleResolver = new ChatTitleResolver(log);
   const transcriptWatcher = new TranscriptWatcher(titleResolver, log);
-  const openChatsTracker = new OpenChatsTracker();
+  const openChatsTracker = new OpenChatsTracker(log);
   const aiTrackingWatcher = new AiTrackingDbWatcher(log);
   const cacheKeepManager = new CacheKeepManager(timerManager);
   const statusBar = new StatusBar(timerManager, openChatsTracker);

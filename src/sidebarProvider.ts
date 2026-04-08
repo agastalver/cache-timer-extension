@@ -62,25 +62,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   static async openCursorChat(chatId: string): Promise<void> {
-    const candidates = [
-      `workbench.panel.aichat.view.${chatId}.focus`,
-      `workbench.panel.composerChatViewPane.${chatId}.focus`,
+    const strategies: Array<{ cmd: string; args: unknown[] }> = [
+      { cmd: "composer.openComposer", args: [chatId] },
+      { cmd: "composer.focusComposer", args: [chatId] },
+      { cmd: "composer.openChatAsEditor", args: [chatId] },
+      { cmd: `workbench.panel.aichat.view.${chatId}.focus`, args: [] },
+      { cmd: `workbench.panel.composerChatViewPane.${chatId}.focus`, args: [] },
+      { cmd: "composerChatViewPane.focus", args: [chatId] },
     ];
-    for (const cmd of candidates) {
+    for (const { cmd, args } of strategies) {
       try {
-        await vscode.commands.executeCommand(cmd);
+        await vscode.commands.executeCommand(cmd, ...args);
         return;
       } catch {
-        // Command not found, try next
+        // Command not available, try next
       }
-    }
-    try {
-      await vscode.commands.executeCommand(
-        "composerChatViewPane.focus",
-        chatId
-      );
-    } catch {
-      // Not supported
     }
   }
 
