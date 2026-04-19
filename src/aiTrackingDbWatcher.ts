@@ -67,7 +67,7 @@ export class AiTrackingDbWatcher implements vscode.Disposable {
     execFile(
       "sqlite3",
       ["-separator", "|", `file://${this.dbPath}?immutable=1`, query],
-      { timeout: 5_000 },
+      { timeout: 5_000, maxBuffer: 8 * 1024 * 1024, encoding: "utf-8" },
       (err, stdout) => {
         this.polling = false;
 

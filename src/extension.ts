@@ -17,7 +17,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const transcriptWatcher = new TranscriptWatcher(titleResolver, log);
   const openChatsTracker = new OpenChatsTracker(log);
   const aiTrackingWatcher = new AiTrackingDbWatcher(log);
-  const cacheKeepManager = new CacheKeepManager(timerManager);
+  const cacheKeepManager = new CacheKeepManager(timerManager, log);
   const statusBar = new StatusBar(timerManager, openChatsTracker);
   const sidebarProvider = new SidebarProvider(
     context.extensionUri,
@@ -42,6 +42,11 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     transcriptWatcher.onAssistantMessage((event) => {
       timerManager.resetTimer(event.chatId, event.title, event.timestamp);
+      // New chats may not yet be in titleCache; pull fresh titles out-of-band
+      // instead of waiting for the 30s periodic sweep.
+      if (!titleResolver.getTitle(event.chatId)) {
+        titleResolver.forceRefresh();
+      }
     })
   );
 
@@ -128,6 +133,17 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(
           `Cache expired for "${timer.title}" — next message will incur a full cache write`
         );
+      }
+    })
+  );
+
+  // Keep long-running extension host memory flat: when a timer ages out of
+  // the TimerManager, drop any related state held by sibling components.
+  context.subscriptions.push(
+    timerManager.onTimerRemoved((chatId) => {
+      warnedChats.delete(chatId);
+      if (cacheKeepManager.isKeeping(chatId)) {
+        cacheKeepManager.stopKeep(chatId);
       }
     })
   );

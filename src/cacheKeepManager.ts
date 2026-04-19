@@ -13,7 +13,6 @@ interface KeepSession {
 export class CacheKeepManager implements vscode.Disposable {
   private sessions = new Map<string, KeepSession>();
   private disposables: vscode.Disposable[] = [];
-  private readonly log: vscode.OutputChannel;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -27,9 +26,10 @@ export class CacheKeepManager implements vscode.Disposable {
       .get<number>("cacheKeepDurationSeconds", 1800);
   }
 
-  constructor(private readonly timerManager: TimerManager) {
-    this.log = vscode.window.createOutputChannel("Cache Timer");
-    this.disposables.push(this.log);
+  constructor(
+    private readonly timerManager: TimerManager,
+    private readonly log: vscode.OutputChannel
+  ) {
     this.disposables.push(
       timerManager.onDidChange(() => this.checkTimers())
     );
@@ -108,8 +108,7 @@ export class CacheKeepManager implements vscode.Disposable {
 
   private checkTimers(): void {
     for (const session of this.sessions.values()) {
-      const timers = this.timerManager.getAll();
-      const timer = timers.find((t) => t.id === session.chatId);
+      const timer = this.timerManager.getTimer(session.chatId);
       if (!timer) {
         continue;
       }
@@ -153,7 +152,7 @@ export class CacheKeepManager implements vscode.Disposable {
 
       await delay(300);
 
-      const timer = this.timerManager.getAll().find((t) => t.id === chatId);
+      const timer = this.timerManager.getTimer(chatId);
       const title = timer?.title ?? chatId.slice(0, 8);
       vscode.window.showInformationMessage(
         `Keep-alive ready for "${title}" — press Enter to send`

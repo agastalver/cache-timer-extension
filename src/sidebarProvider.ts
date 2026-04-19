@@ -10,6 +10,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private disposables: vscode.Disposable[] = [];
+  private lastPayloadJson: string | undefined;
+  private pendingUpdate: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -19,13 +21,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private readonly transcriptWatcher: TranscriptWatcher
   ) {
     this.disposables.push(
-      timerManager.onDidChange(() => this.sendUpdate())
+      timerManager.onDidChange(() => this.scheduleUpdate())
     );
     this.disposables.push(
-      openChatsTracker.onDidChange(() => this.sendUpdate())
+      openChatsTracker.onDidChange(() => this.scheduleUpdate())
     );
     this.disposables.push(
-      cacheKeepManager.onDidChange(() => this.sendUpdate())
+      cacheKeepManager.onDidChange(() => this.scheduleUpdate())
     );
   }
 
@@ -58,6 +60,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       this.view = undefined;
     });
 
+    // Reset dedupe so the freshly-loaded webview gets the current state even
+    // if it's byte-identical to the last post before it was hidden.
+    this.lastPayloadJson = undefined;
     this.sendUpdate();
   }
 
@@ -95,6 +100,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Coalesce bursty events (timer tick + chat activity + title refresh all in
+   * the same JS turn) into a single postMessage per animation frame-ish
+   * interval. Also skips posts when the serialized payload is byte-identical
+   * to the last one — webviews then don't need to do a full re-render.
+   */
+  private scheduleUpdate(): void {
+    if (this.pendingUpdate) {
+      return;
+    }
+    this.pendingUpdate = setTimeout(() => {
+      this.pendingUpdate = undefined;
+      this.sendUpdate();
+    }, 100);
+  }
+
   private sendUpdate(): void {
     if (!this.view) {
       return;
@@ -103,7 +124,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     const ttl = this.timerManager.ttlSeconds;
     const timers = this.timerManager.getAll();
     const openChatIds = this.openChatsTracker.getOrderedOpenIds();
-    this.view.webview.postMessage({
+    const payload = {
       type: "update",
       ttl,
       openChatIds,
@@ -117,7 +138,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         isStreaming: this.timerManager.isStreaming(t.id),
         cacheKeep: this.cacheKeepManager.getKeepInfo(t.id) ?? null,
       })),
-    });
+    };
+
+    const json = JSON.stringify(payload);
+    if (json === this.lastPayloadJson) {
+      return;
+    }
+    this.lastPayloadJson = json;
+    this.view.webview.postMessage(payload);
   }
 
   private getHtml(): string {
@@ -125,6 +153,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   dispose(): void {
+    if (this.pendingUpdate) {
+      clearTimeout(this.pendingUpdate);
+      this.pendingUpdate = undefined;
+    }
     for (const d of this.disposables) {
       d.dispose();
     }

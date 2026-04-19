@@ -9,6 +9,9 @@ export interface ChatTimer {
   isExpired: boolean;
 }
 
+/** Evict timers whose lastAssistantTime is older than TTL + this grace. */
+const EVICT_AFTER_EXPIRY_MS = 60 * 60 * 1000;
+
 export class TimerManager implements vscode.Disposable {
   private timers = new Map<string, ChatTimer>();
   private streamingSources = new Map<string, Set<string>>();
@@ -19,6 +22,9 @@ export class TimerManager implements vscode.Disposable {
 
   private readonly _onTimerExpired = new vscode.EventEmitter<ChatTimer>();
   readonly onTimerExpired = this._onTimerExpired.event;
+
+  private readonly _onTimerRemoved = new vscode.EventEmitter<string>();
+  readonly onTimerRemoved = this._onTimerRemoved.event;
 
   get ttlSeconds(): number {
     return vscode.workspace
@@ -96,6 +102,10 @@ export class TimerManager implements vscode.Disposable {
     );
   }
 
+  getTimer(chatId: string): ChatTimer | undefined {
+    return this.timers.get(chatId);
+  }
+
   getMostRecent(): ChatTimer | undefined {
     let best: ChatTimer | undefined;
     for (const t of this.timers.values()) {
@@ -110,7 +120,9 @@ export class TimerManager implements vscode.Disposable {
     let changed = false;
     const now = Date.now();
     const ttl = this.ttlSeconds;
+    const evictBefore = now - ttl * 1000 - EVICT_AFTER_EXPIRY_MS;
 
+    const toEvict: string[] = [];
     for (const timer of this.timers.values()) {
       const elapsed = (now - timer.lastAssistantTime) / 1000;
       const remaining = Math.max(0, ttl - elapsed);
@@ -127,6 +139,17 @@ export class TimerManager implements vscode.Disposable {
           this._onTimerExpired.fire(timer);
         }
       }
+
+      if (timer.isExpired && timer.lastAssistantTime < evictBefore) {
+        toEvict.push(timer.id);
+      }
+    }
+
+    for (const id of toEvict) {
+      this.timers.delete(id);
+      this.streamingSources.delete(id);
+      this._onTimerRemoved.fire(id);
+      changed = true;
     }
 
     if (changed) {
@@ -141,5 +164,6 @@ export class TimerManager implements vscode.Disposable {
     }
     this._onDidChange.dispose();
     this._onTimerExpired.dispose();
+    this._onTimerRemoved.dispose();
   }
 }

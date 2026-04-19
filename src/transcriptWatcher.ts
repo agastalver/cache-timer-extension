@@ -21,6 +21,15 @@ export type WatcherStatus =
   | "watching"
   | "ready";
 
+/** Bytes read from the end of a transcript to extract the last JSONL line. */
+const TAIL_READ_WINDOW = 512 * 1024;
+/** Bytes read from the start when scanning for the initial user message (title). */
+const HEAD_READ_WINDOW = 64 * 1024;
+/** After this many ms of no file activity, per-chat state is evicted. */
+const EVICTION_IDLE_MS = 60 * 60 * 1000;
+/** Streaming must complete within this window or we clear the flag. */
+const STREAMING_TIMEOUT_MS = 5 * 60 * 1000;
+
 export class TranscriptWatcher implements vscode.Disposable {
   private watchers: fs.FSWatcher[] = [];
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -30,7 +39,8 @@ export class TranscriptWatcher implements vscode.Disposable {
   >();
   private fallbackTitleCache = new Map<string, string>();
   private streamingSince = new Map<string, number>();
-  private lastSeenLineCount = new Map<string, number>();
+  private lastSeenSize = new Map<string, number>();
+  private lastSeenMtime = new Map<string, number>();
   private rescanInterval: ReturnType<typeof setInterval> | undefined;
 
   private readonly _onAssistantMessage =
@@ -230,13 +240,13 @@ export class TranscriptWatcher implements vscode.Disposable {
   /**
    * Periodic fallback re-scan to catch transcripts that fs.watch may have
    * missed (especially common on Linux where recursive inotify is unreliable).
+   * Also evicts per-chat state for chats that have been idle for a long time.
    */
   private rescan(): void {
     if (!this._transcriptDir || !fs.existsSync(this._transcriptDir)) {
       return;
     }
 
-    const STREAMING_TIMEOUT_MS = 5 * 60 * 1000;
     const now = Date.now();
     for (const [chatId, since] of this.streamingSince) {
       if (now - since > STREAMING_TIMEOUT_MS) {
@@ -244,6 +254,8 @@ export class TranscriptWatcher implements vscode.Disposable {
         this.clearStreaming(chatId);
       }
     }
+
+    const seen = new Set<string>();
 
     try {
       const entries = fs.readdirSync(this._transcriptDir, {
@@ -262,12 +274,15 @@ export class TranscriptWatcher implements vscode.Disposable {
         if (!fs.existsSync(jsonlPath)) {
           continue;
         }
+        seen.add(entry.name);
 
         try {
           const stat = fs.statSync(jsonlPath);
-          const prevLines = this.lastSeenLineCount.get(entry.name) ?? 0;
-          const ageMs = Date.now() - stat.mtimeMs;
-          if (prevLines === 0 || ageMs < 15_000) {
+          const prevSize = this.lastSeenSize.get(entry.name) ?? 0;
+          const ageMs = now - stat.mtimeMs;
+          // Only reprocess when the file has actually changed or is very
+          // fresh. Avoids re-reading dozens of inert transcripts every 10s.
+          if (stat.size !== prevSize || ageMs < 15_000) {
             this.processFile(jsonlPath, entry.name);
           }
         } catch {
@@ -276,6 +291,52 @@ export class TranscriptWatcher implements vscode.Disposable {
       }
     } catch {
       // Directory may have been removed
+    }
+
+    this.evictStaleState(seen, now);
+  }
+
+  /**
+   * Drop per-chat state for chats whose transcript file has disappeared or
+   * hasn't been touched in a long time. Without this, every long-running
+   * session would accumulate state for every chat that has ever existed in
+   * the workspace.
+   */
+  private evictStaleState(seenChatIds: Set<string>, now: number): void {
+    const maybeEvict = (chatId: string): void => {
+      if (!seenChatIds.has(chatId)) {
+        this.forgetChat(chatId);
+        return;
+      }
+      const lastTouch = this.lastSeenMtime.get(chatId);
+      if (lastTouch !== undefined && now - lastTouch > EVICTION_IDLE_MS) {
+        this.forgetChat(chatId);
+      }
+    };
+
+    for (const id of Array.from(this.lastSeenSize.keys())) {
+      maybeEvict(id);
+    }
+    for (const id of Array.from(this.fallbackTitleCache.keys())) {
+      maybeEvict(id);
+    }
+  }
+
+  private forgetChat(chatId: string): void {
+    this.lastSeenSize.delete(chatId);
+    this.lastSeenMtime.delete(chatId);
+    this.fallbackTitleCache.delete(chatId);
+    this.clearStreaming(chatId);
+
+    const debounce = this.debounceTimers.get(chatId);
+    if (debounce) {
+      clearTimeout(debounce);
+      this.debounceTimers.delete(chatId);
+    }
+    const throttle = this.throttleTimers.get(chatId);
+    if (throttle) {
+      clearTimeout(throttle.timer);
+      this.throttleTimers.delete(chatId);
     }
   }
 
@@ -349,35 +410,32 @@ export class TranscriptWatcher implements vscode.Disposable {
     initialScan = false
   ): void {
     try {
-      const content = fs.readFileSync(filePath, "utf-8");
-      const lines = content.trim().split("\n").filter(Boolean);
+      const stat = fs.statSync(filePath);
+      this.lastSeenMtime.set(chatId, stat.mtimeMs);
 
-      if (lines.length === 0) {
+      const prevSize = this.lastSeenSize.get(chatId) ?? 0;
+      this.lastSeenSize.set(chatId, stat.size);
+
+      if (stat.size === 0) {
         this.clearStreaming(chatId);
         return;
       }
 
-      const prevLineCount = this.lastSeenLineCount.get(chatId) ?? 0;
-      this.lastSeenLineCount.set(chatId, lines.length);
-
+      // Scan for an initial title once — only cheap-read the head of the
+      // file, not the entire transcript.
       if (!this.fallbackTitleCache.has(chatId)) {
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line);
-            if (entry.role === "user") {
-              const title = this.extractTitle(entry);
-              if (title) {
-                this.fallbackTitleCache.set(chatId, title);
-                break;
-              }
-            }
-          } catch {
-            continue;
-          }
+        const title = this.readInitialTitle(filePath);
+        if (title) {
+          this.fallbackTitleCache.set(chatId, title);
         }
       }
 
-      const lastLine = lines[lines.length - 1];
+      const lastLine = this.readLastLine(filePath, stat.size);
+      if (!lastLine) {
+        this.clearStreaming(chatId);
+        return;
+      }
+
       let lastEntry: any;
       try {
         lastEntry = JSON.parse(lastLine);
@@ -388,8 +446,8 @@ export class TranscriptWatcher implements vscode.Disposable {
 
       if (
         lastEntry.role === "user" &&
-        lines.length > prevLineCount &&
-        prevLineCount > 0
+        stat.size > prevSize &&
+        prevSize > 0
       ) {
         const messageText = this.extractMessageText(lastEntry) ?? "";
         this._onUserMessage.fire({ chatId, messageText });
@@ -402,7 +460,6 @@ export class TranscriptWatcher implements vscode.Disposable {
       }
 
       if (lastEntry.role === "assistant") {
-        const stat = fs.statSync(filePath);
         const streamStart = this.streamingSince.get(chatId);
         const timestamp = streamStart ?? stat.mtimeMs;
         const title =
@@ -423,7 +480,6 @@ export class TranscriptWatcher implements vscode.Disposable {
         // During initial scan, also register chats where the user sent the
         // last message — the cache may still be warm from a prior assistant
         // response. Use the file mtime as the best-available timestamp.
-        const stat = fs.statSync(filePath);
         const title =
           this.titleResolver.getTitle(chatId) ??
           this.fallbackTitleCache.get(chatId) ??
@@ -441,6 +497,116 @@ export class TranscriptWatcher implements vscode.Disposable {
     } catch (err) {
       this.log.appendLine(`[TranscriptWatcher] Error processing ${chatId}: ${err}`);
     }
+  }
+
+  /**
+   * Read the last complete line of a JSONL file without loading the whole
+   * thing. Returns `undefined` if the last line is truncated by the tail
+   * window (caller treats this like a parse failure and waits for the next
+   * event).
+   */
+  private readLastLine(filePath: string, size: number): string | undefined {
+    if (size <= 0) {
+      return undefined;
+    }
+    const start = Math.max(0, size - TAIL_READ_WINDOW);
+    const length = size - start;
+
+    let fd: number | undefined;
+    try {
+      fd = fs.openSync(filePath, "r");
+      const buffer = Buffer.allocUnsafe(length);
+      let read = 0;
+      while (read < length) {
+        const n = fs.readSync(fd, buffer, read, length - read, start + read);
+        if (n <= 0) {
+          break;
+        }
+        read += n;
+      }
+      let raw = buffer.subarray(0, read).toString("utf-8");
+
+      // Strip trailing newlines.
+      let end = raw.length;
+      while (end > 0 && (raw[end - 1] === "\n" || raw[end - 1] === "\r")) {
+        end--;
+      }
+      if (end === 0) {
+        return undefined;
+      }
+      raw = raw.slice(0, end);
+
+      const lastNl = raw.lastIndexOf("\n");
+      if (lastNl === -1) {
+        // Last line extends before the tail window — skip this round.
+        if (start > 0) {
+          return undefined;
+        }
+        return raw;
+      }
+      return raw.slice(lastNl + 1);
+    } catch {
+      return undefined;
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  /**
+   * Peek at the first N bytes of a transcript to extract the first user
+   * message for use as a fallback title. Much cheaper than reading the whole
+   * file and called at most once per chat (the result is cached).
+   */
+  private readInitialTitle(filePath: string): string | undefined {
+    let fd: number | undefined;
+    try {
+      fd = fs.openSync(filePath, "r");
+      const buffer = Buffer.allocUnsafe(HEAD_READ_WINDOW);
+      const read = fs.readSync(fd, buffer, 0, HEAD_READ_WINDOW, 0);
+      if (read <= 0) {
+        return undefined;
+      }
+      const raw = buffer.subarray(0, read).toString("utf-8");
+
+      const lastNl = raw.lastIndexOf("\n");
+      // If we read the whole file it may not end with a newline; otherwise the
+      // last line is almost certainly truncated and should be skipped.
+      const usable = read < HEAD_READ_WINDOW ? raw : lastNl === -1 ? "" : raw.slice(0, lastNl);
+
+      for (const line of usable.split("\n")) {
+        if (!line) {
+          continue;
+        }
+        try {
+          const entry = JSON.parse(line);
+          if (entry.role === "user") {
+            const title = this.extractTitle(entry);
+            if (title) {
+              return title;
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return undefined;
   }
 
   private clearStreaming(chatId: string): void {

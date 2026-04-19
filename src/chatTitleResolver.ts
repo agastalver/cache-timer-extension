@@ -1,19 +1,18 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { execFileSync, execFile } from "child_process";
+import { execFile } from "child_process";
 import { getCursorConfigHome } from "./hostPaths";
 
-interface ComposerHead {
-  composerId: string;
-  name: string | null;
-  createdAt?: number;
-  lastUpdatedAt?: number | null;
-  workspaceIdentifier?: {
-    id?: string;
-    uri?: { fsPath?: string };
-  };
-}
+/**
+ * Default `maxBuffer` for `execFile` is 1 MiB, which the Cursor global state
+ * JSON can exceed easily (it holds metadata for every chat in every
+ * workspace). We cap stdout at 32 MiB just in case — on a normal install the
+ * filtered result is only a few KB.
+ */
+const SQLITE_MAX_BUFFER = 32 * 1024 * 1024;
+const SQLITE_TIMEOUT_MS = 5_000;
+const REFRESH_INTERVAL_MS = 30_000;
 
 /**
  * Reads chat titles from Cursor's SQLite state databases.
@@ -25,6 +24,10 @@ interface ComposerHead {
  * Older / fallback: workspace-specific DB:
  *   ~/.config/Cursor/User/workspaceStorage/<hash>/state.vscdb
  * under "composer.composerData".
+ *
+ * The queries filter using SQLite's JSON functions so only rows belonging to
+ * the current workspace cross the process boundary, which keeps memory flat
+ * even when the global DB is several GB.
  */
 export class ChatTitleResolver implements vscode.Disposable {
   private titleCache = new Map<string, string>();
@@ -34,6 +37,7 @@ export class ChatTitleResolver implements vscode.Disposable {
   private workspaceStorageFolderId: string | undefined;
   private workspaceFolderFsPath: string | undefined;
   private refreshInterval: ReturnType<typeof setInterval> | undefined;
+  private refreshing = false;
 
   private readonly _onDidRefresh = new vscode.EventEmitter<
     Map<string, string>
@@ -68,8 +72,8 @@ export class ChatTitleResolver implements vscode.Disposable {
       );
     }
 
-    this.refreshSync();
-    this.refreshInterval = setInterval(() => this.refreshAsync(), 5_000);
+    void this.refresh();
+    this.refreshInterval = setInterval(() => void this.refresh(), REFRESH_INTERVAL_MS);
   }
 
   getTitle(chatId: string): string | undefined {
@@ -78,6 +82,11 @@ export class ChatTitleResolver implements vscode.Disposable {
 
   getAllTitles(): Map<string, string> {
     return this.titleCache;
+  }
+
+  /** Request an out-of-schedule refresh (e.g. when a new chat appears). */
+  forceRefresh(): void {
+    void this.refresh();
   }
 
   private findWorkspaceStateDb(): string | undefined {
@@ -138,163 +147,156 @@ export class ChatTitleResolver implements vscode.Disposable {
     return undefined;
   }
 
-  /** Whether a global composer row belongs to the current workspace. */
-  private matchesCurrentWorkspace(c: ComposerHead): boolean {
-    const wi = c.workspaceIdentifier;
-    if (!wi) {
-      return false;
-    }
-    if (
-      this.workspaceStorageFolderId &&
-      wi.id === this.workspaceStorageFolderId
-    ) {
-      return true;
-    }
-    const remoteFs = wi.uri?.fsPath;
-    if (remoteFs && this.workspaceFolderFsPath) {
-      return this.pathsEqual(remoteFs, this.workspaceFolderFsPath);
-    }
-    return false;
-  }
-
-  private pathsEqual(a: string, b: string): boolean {
-    const na = path.normalize(a);
-    const nb = path.normalize(b);
-    if (na === nb) {
-      return true;
-    }
-    if (process.platform === "win32") {
-      return na.toLowerCase() === nb.toLowerCase();
-    }
-    return false;
+  private execSqlite(
+    dbPath: string,
+    sql: string
+  ): Promise<string> {
+    return new Promise((resolve) => {
+      execFile(
+        "sqlite3",
+        ["-separator", "\t", `file://${dbPath}?immutable=1`, sql],
+        {
+          timeout: SQLITE_TIMEOUT_MS,
+          maxBuffer: SQLITE_MAX_BUFFER,
+          encoding: "utf-8",
+        },
+        (err, stdout) => {
+          if (err) {
+            this.log.appendLine(
+              `[ChatTitleResolver] sqlite3 query failed: ${err}`
+            );
+            resolve("");
+            return;
+          }
+          resolve(typeof stdout === "string" ? stdout : "");
+        }
+      );
+    });
   }
 
   /**
-   * Parses global `composer.composerHeaders` JSON (all workspaces); only entries
-   * for the current workspace are cached.
+   * Query composer headers from the global DB, filtering by the current
+   * workspace inside the SQL so the subprocess only emits a few rows instead
+   * of the full multi-MB JSON blob.
    */
-  private parseComposerHeaders(raw: string): void {
-    try {
-      const data = JSON.parse(raw.trim());
-      const composers: ComposerHead[] = data.allComposers ?? [];
-      for (const c of composers) {
-        if (!c.composerId || !c.name) {
-          continue;
-        }
-        if (!this.matchesCurrentWorkspace(c)) {
-          continue;
-        }
-        this.titleCache.set(c.composerId, c.name);
-      }
-    } catch {
-      // Malformed JSON
-    }
-  }
-
-  private parseComposerData(raw: string): void {
-    try {
-      const data = JSON.parse(raw.trim());
-      const composers: ComposerHead[] = data.allComposers ?? [];
-      for (const c of composers) {
-        if (c.composerId && c.name) {
-          this.titleCache.set(c.composerId, c.name);
-        }
-      }
-    } catch {
-      // Malformed JSON
-    }
-  }
-
-  private querySqlite(dbPath: string, sql: string): string {
-    return execFileSync(
-      "sqlite3",
-      [`file://${dbPath}?immutable=1`, sql],
-      {
-        timeout: 5000,
-        encoding: "utf-8",
-      }
-    );
-  }
-
-  private refreshSync(): void {
-    this.titleCache.clear();
-
-    if (this.globalDbPath) {
-      const q =
-        "SELECT value FROM ItemTable WHERE key = 'composer.composerHeaders'";
-      try {
-        const stdout = this.querySqlite(this.globalDbPath, q);
-        if (stdout.trim()) {
-          this.parseComposerHeaders(stdout);
-        }
-      } catch (err) {
-        this.log.appendLine(
-          `[ChatTitleResolver] Global sqlite3 query failed: ${err}`
-        );
-      }
-    }
-
-    if (this.dbPath) {
-      const q =
-        "SELECT value FROM ItemTable WHERE key = 'composer.composerData'";
-      try {
-        const stdout = this.querySqlite(this.dbPath, q);
-        if (stdout.trim()) {
-          this.parseComposerData(stdout);
-        }
-      } catch (err) {
-        this.log.appendLine(
-          `[ChatTitleResolver] Workspace sqlite3 query failed (is sqlite3 installed?): ${err}`
-        );
-      }
-    }
-
-    this.log.appendLine(
-      `[ChatTitleResolver] Loaded ${this.titleCache.size} title(s) total`
-    );
-  }
-
-  private refreshAsync(): void {
-    this.titleCache.clear();
-
-    const loadWorkspaceAndEmit = (): void => {
-      if (!this.dbPath) {
-        this._onDidRefresh.fire(this.titleCache);
-        return;
-      }
-      const q =
-        "SELECT value FROM ItemTable WHERE key = 'composer.composerData'";
-      execFile(
-        "sqlite3",
-        [`file://${this.dbPath}?immutable=1`, q],
-        { timeout: 5000 },
-        (err, stdout) => {
-          if (!err && stdout?.trim()) {
-            this.parseComposerData(stdout);
-          }
-          this._onDidRefresh.fire(this.titleCache);
-        }
+  private buildGlobalHeadersQuery(): string | undefined {
+    const filters: string[] = [];
+    if (this.workspaceStorageFolderId) {
+      filters.push(
+        `json_extract(j.value, '$.workspaceIdentifier.id') = ${sqlString(
+          this.workspaceStorageFolderId
+        )}`
       );
-    };
+    }
+    if (this.workspaceFolderFsPath) {
+      filters.push(
+        `json_extract(j.value, '$.workspaceIdentifier.uri.fsPath') = ${sqlString(
+          this.workspaceFolderFsPath
+        )}`
+      );
+    }
+    if (filters.length === 0) {
+      return undefined;
+    }
 
-    if (!this.globalDbPath) {
-      loadWorkspaceAndEmit();
+    return [
+      "SELECT",
+      "  json_extract(j.value, '$.composerId'),",
+      "  json_extract(j.value, '$.name')",
+      "FROM ItemTable, json_each(json_extract(ItemTable.value, '$.allComposers')) j",
+      "WHERE ItemTable.key = 'composer.composerHeaders'",
+      `  AND (${filters.join(" OR ")});`,
+    ].join(" ");
+  }
+
+  private buildWorkspaceHeadersQuery(): string {
+    return [
+      "SELECT",
+      "  json_extract(j.value, '$.composerId'),",
+      "  json_extract(j.value, '$.name')",
+      "FROM ItemTable, json_each(json_extract(ItemTable.value, '$.allComposers')) j",
+      "WHERE ItemTable.key = 'composer.composerData';",
+    ].join(" ");
+  }
+
+  private parseRows(stdout: string, next: Map<string, string>): void {
+    if (!stdout) {
       return;
     }
-
-    const globalQ =
-      "SELECT value FROM ItemTable WHERE key = 'composer.composerHeaders'";
-    execFile(
-      "sqlite3",
-      [`file://${this.globalDbPath}?immutable=1`, globalQ],
-      { timeout: 5000 },
-      (err, stdout) => {
-        if (!err && stdout?.trim()) {
-          this.parseComposerHeaders(stdout);
-        }
-        loadWorkspaceAndEmit();
+    for (const line of stdout.split("\n")) {
+      const trimmed = line.replace(/\r$/, "");
+      if (!trimmed) {
+        continue;
       }
-    );
+      const tab = trimmed.indexOf("\t");
+      if (tab < 0) {
+        continue;
+      }
+      const id = trimmed.slice(0, tab);
+      const name = trimmed.slice(tab + 1);
+      if (!id || !name) {
+        continue;
+      }
+      next.set(id, name);
+    }
+  }
+
+  private async refresh(): Promise<void> {
+    if (this.refreshing) {
+      return;
+    }
+    this.refreshing = true;
+
+    try {
+      const next = new Map<string, string>();
+
+      if (this.globalDbPath) {
+        const q = this.buildGlobalHeadersQuery();
+        if (q) {
+          const stdout = await this.execSqlite(this.globalDbPath, q);
+          this.parseRows(stdout, next);
+        }
+      }
+
+      if (this.dbPath) {
+        const stdout = await this.execSqlite(
+          this.dbPath,
+          this.buildWorkspaceHeadersQuery()
+        );
+        this.parseRows(stdout, next);
+      }
+
+      if (this.mergeIntoCache(next)) {
+        this.log.appendLine(
+          `[ChatTitleResolver] Titles refreshed (${this.titleCache.size} total)`
+        );
+        this._onDidRefresh.fire(this.titleCache);
+      }
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
+  /** Diff `next` into `titleCache`; returns true iff anything changed. */
+  private mergeIntoCache(next: Map<string, string>): boolean {
+    let changed = false;
+
+    for (const [id, name] of next) {
+      if (this.titleCache.get(id) !== name) {
+        this.titleCache.set(id, name);
+        changed = true;
+      }
+    }
+
+    // Evict titles that are no longer in the DB (chat deleted etc.).
+    for (const id of this.titleCache.keys()) {
+      if (!next.has(id)) {
+        this.titleCache.delete(id);
+        changed = true;
+      }
+    }
+
+    return changed;
   }
 
   dispose(): void {
@@ -304,4 +306,9 @@ export class ChatTitleResolver implements vscode.Disposable {
     }
     this._onDidRefresh.dispose();
   }
+}
+
+/** Escape a value for inclusion as a single-quoted SQL string literal. */
+function sqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
