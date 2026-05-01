@@ -115,10 +115,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (including **release tagging** for Open V
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-## Marketplace vs this README
-
-On the marketplace **listing**, users mainly see the extension **name** (`displayName` in `package.json`), **icon**, and the **short description** (the `description` field — one line). The **full README** is what appears on the extension **detail page** as the long description when you publish. Keep screenshots and setup notes here so that page stays clear for new users.
-
 ## License
 
 Licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (SPDX: `AGPL-3.0`). The full license text is shipped with the extension as [LICENSE](LICENSE).
